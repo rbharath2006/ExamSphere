@@ -1,0 +1,27 @@
+@'
+# Java and Maven
+backend/target/
+*.class
+*.jar
+*.log
+
+# IntelliJ
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Operating system
+.DS_Store
+Thumbs.db
+'@ | Set-Content -Encoding utf8 .gitignore
