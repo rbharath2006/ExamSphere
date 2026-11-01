@@ -6,13 +6,15 @@ import com.onlineexam.backend.entity.UserRole;
 import com.onlineexam.backend.exception.EmailAlreadyRegisteredException;
 import com.onlineexam.backend.repository.UserAccountRepository;
 
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.dao.DataIntegrityViolationException;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
+
 @Service
 public class UserService {
 
@@ -27,56 +29,109 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    /**
+     * Public student registration.
+     * Users can only register themselves as STUDENT.
+     */
     @Transactional
     public UserAccount registerStudent(
             String fullName,
             String email,
             String rawPassword
     ) {
+        return createUser(
+                fullName,
+                email,
+                rawPassword,
+                UserRole.STUDENT
+        );
+    }
 
-        // Validate essential input
+    /**
+     * Admin-only teacher creation.
+     * Only the AdminController should expose this operation.
+     */
+    @Transactional
+    public UserAccount createTeacher(
+            String fullName,
+            String email,
+            String rawPassword
+    ) {
+        return createUser(
+                fullName,
+                email,
+                rawPassword,
+                UserRole.TEACHER
+        );
+    }
+
+    /**
+     * Common method used to create user accounts.
+     */
+    private UserAccount createUser(
+            String fullName,
+            String email,
+            String rawPassword,
+            UserRole role
+    ) {
+
+        // 1. Validate full name
         if (fullName == null || fullName.isBlank()) {
             throw new IllegalArgumentException(
                     "Full name is required"
             );
         }
 
+        // 2. Validate email
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException(
                     "Email is required"
             );
         }
 
-        if (rawPassword.getBytes(StandardCharsets.UTF_8).length > 72) {
+        // 3. Validate password
+        if (rawPassword == null || rawPassword.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Password is required"
+            );
+        }
+
+        // 4. Check BCrypt's maximum password input size
+        int passwordBytes =
+                rawPassword.getBytes(StandardCharsets.UTF_8).length;
+
+        if (passwordBytes > 72) {
             throw new IllegalArgumentException(
                     "Password is too long for the configured password encoder"
             );
         }
 
-        // Normalize email
+        // 5. Normalize user information
+        String normalizedName = fullName.trim();
+
         String normalizedEmail =
                 email.trim().toLowerCase(Locale.ROOT);
 
-        // Check duplicate email
+        // 6. Check whether email is already registered
         if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
             throw new EmailAlreadyRegisteredException(
                     "An account with this email already exists"
             );
         }
 
-        // Encode password
+        // 7. Hash the password before storing it
         String encodedPassword =
                 passwordEncoder.encode(rawPassword);
 
-        // Public registration can only create STUDENT accounts
+        // 8. Create account with the specified role
         UserAccount newUser = new UserAccount(
-                fullName,
+                normalizedName,
                 normalizedEmail,
                 encodedPassword,
-                UserRole.STUDENT
+                role
         );
 
-        // Save user
+        // 9. Save account and handle duplicate-email race conditions
         try {
             return userRepository.saveAndFlush(newUser);
 
@@ -86,17 +141,28 @@ public class UserService {
                     "An account with this email already exists"
             );
         }
-
     }
+
+    /**
+     * Find an account using its email address.
+     */
     @Transactional(readOnly = true)
     public UserAccount findByEmail(String email) {
 
-        return userRepository.findByEmailIgnoreCase(email.trim())
+        if (email == null || email.isBlank()) {
+            throw new UsernameNotFoundException(
+                    "User account not found"
+            );
+        }
+
+        String normalizedEmail =
+                email.trim().toLowerCase(Locale.ROOT);
+
+        return userRepository.findByEmailIgnoreCase(normalizedEmail)
                 .orElseThrow(() ->
                         new UsernameNotFoundException(
                                 "User account not found"
                         )
                 );
     }
-
 }
