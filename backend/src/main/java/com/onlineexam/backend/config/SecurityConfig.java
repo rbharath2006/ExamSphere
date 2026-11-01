@@ -92,8 +92,10 @@ public class SecurityConfig {
 
                 .csrf(csrf -> csrf.spa())
 
+
                 .authorizeHttpRequests(authorize -> authorize
 
+                        // Public endpoints
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/health",
@@ -106,8 +108,22 @@ public class SecurityConfig {
                                 "/api/auth/login"
                         ).permitAll()
 
+                        // Administrator permissions
+                        .requestMatchers("/api/admin/**")
+                        .hasRole("ADMIN")
+
+                        // Teacher permissions
+                        .requestMatchers("/api/teacher/**")
+                        .hasRole("TEACHER")
+
+                        // Student permissions
+                        .requestMatchers("/api/student/**")
+                        .hasRole("STUDENT")
+
+                        // All remaining endpoints require authentication
                         .anyRequest().authenticated()
                 )
+
 
                 // Database-backed session authentication
                 .formLogin(form -> form
