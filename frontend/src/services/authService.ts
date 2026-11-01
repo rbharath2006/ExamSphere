@@ -133,3 +133,40 @@ export async function getRoleDashboard(role: UserRole) {
         message: string
     }>
 }
+
+export interface AdminDashboardSummaryResponse {
+    totalUsers: number
+    totalStudents: number
+    totalTeachers: number
+    totalAdmins: number
+    activeUsers: number
+    disabledUsers: number
+}
+
+export async function getAdminDashboardSummary(): Promise<AdminDashboardSummaryResponse> {
+    const response = await fetch(
+        'http://localhost:8080/api/admin/dashboard/summary',
+        {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                Accept: 'application/json',
+            },
+        }
+    )
+
+    if (!response.ok) {
+        let message = `Failed to load dashboard statistics (${response.status})`
+
+        try {
+            const errorBody = await response.json()
+            message = errorBody.message ?? errorBody.error ?? message
+        } catch {
+            // Keep the fallback error message.
+        }
+
+        throw new Error(message)
+    }
+
+    return response.json() as Promise<AdminDashboardSummaryResponse>
+}
