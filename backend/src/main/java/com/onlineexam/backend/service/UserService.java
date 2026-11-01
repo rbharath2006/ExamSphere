@@ -9,9 +9,10 @@ import com.onlineexam.backend.repository.UserAccountRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import org.springframework.dao.DataIntegrityViolationException;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
-
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 @Service
 public class UserService {
 
@@ -46,9 +47,9 @@ public class UserService {
             );
         }
 
-        if (rawPassword == null || rawPassword.isBlank()) {
+        if (rawPassword.getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new IllegalArgumentException(
-                    "Password is required"
+                    "Password is too long for the configured password encoder"
             );
         }
 
@@ -76,6 +77,26 @@ public class UserService {
         );
 
         // Save user
-        return userRepository.save(newUser);
+        try {
+            return userRepository.saveAndFlush(newUser);
+
+        } catch (DataIntegrityViolationException exception) {
+
+            throw new EmailAlreadyRegisteredException(
+                    "An account with this email already exists"
+            );
+        }
+
     }
+    @Transactional(readOnly = true)
+    public UserAccount findByEmail(String email) {
+
+        return userRepository.findByEmailIgnoreCase(email.trim())
+                .orElseThrow(() ->
+                        new UsernameNotFoundException(
+                                "User account not found"
+                        )
+                );
+    }
+
 }
