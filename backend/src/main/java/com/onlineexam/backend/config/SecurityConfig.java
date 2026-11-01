@@ -16,6 +16,10 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.onlineexam.backend.repository.UserAccountRepository;
+import com.onlineexam.backend.security.AccountStatusFilter;
+
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -83,10 +87,16 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            AuthenticationProvider authenticationProvider
+            AuthenticationProvider authenticationProvider,
+            UserAccountRepository userRepository
     ) throws Exception {
 
         http
+                .addFilterBefore(
+                        new AccountStatusFilter(userRepository),
+                        AuthorizationFilter.class
+                )
+
                 .authenticationProvider(authenticationProvider)
                 .cors(Customizer.withDefaults())
 
