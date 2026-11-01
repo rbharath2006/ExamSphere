@@ -4,7 +4,7 @@ import {
     Route,
     Routes,
 } from 'react-router'
-
+import AdminUsersPage from './pages/AdminUsersPage'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
@@ -23,6 +23,11 @@ export default function App() {
             <Route
                 path="/dashboard/:role"
                 element={<DashboardPage />}
+            />
+
+            <Route
+                path="/admin/users"
+                element={<AdminUsersPage />}
             />
 
             <Route

@@ -202,20 +202,35 @@ export default function DashboardPage() {
             <div className="mx-auto max-w-6xl">
 
                 {/* Header */}
-                <header className="flex items-center justify-between border-b border-slate-800 pb-6">
+
+                <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-6">
 
                     <Link to="/" className="text-2xl font-bold">
                         Exam<span className="text-blue-400">Sphere</span>
                     </Link>
 
-                    <button
-                        onClick={handleLogout}
-                        className="rounded-lg border border-red-500/40 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10"
-                    >
-                        Logout
-                    </button>
+                    <div className="flex items-center gap-3">
+
+                        {user.role === 'ADMIN' && (
+                            <Link
+                                to="/admin/users"
+                                className="rounded-lg border border-blue-500/40 px-4 py-2 text-sm text-blue-400 hover:bg-blue-500/10"
+                            >
+                                Manage Users
+                            </Link>
+                        )}
+
+                        <button
+                            onClick={handleLogout}
+                            className="rounded-lg border border-red-500/40 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10"
+                        >
+                            Logout
+                        </button>
+
+                    </div>
 
                 </header>
+
 
                 {/* Welcome section */}
                 <section className="mt-12">

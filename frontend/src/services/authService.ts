@@ -170,3 +170,96 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummaryR
 
     return response.json() as Promise<AdminDashboardSummaryResponse>
 }
+
+export type ManagedUserRole = 'STUDENT' | 'TEACHER'
+
+export interface AdminManagedUser {
+    id: number
+    fullName: string
+    email: string
+    role: ManagedUserRole
+    enabled: boolean
+    createdAt: string
+}
+
+export interface AdminUserPageResponse {
+    content: AdminManagedUser[]
+    page: number
+    size: number
+    totalElements: number
+    totalPages: number
+    first: boolean
+    last: boolean
+}
+
+/**
+ * Fetch Students and Teachers from the Admin user management API.
+ */
+export async function getAdminUsers(options: {
+    role?: ManagedUserRole
+    search?: string
+    page?: number
+    size?: number
+} = {}): Promise<AdminUserPageResponse> {
+
+    const params = new URLSearchParams()
+
+    if (options.role) {
+        params.set('role', options.role)
+    }
+
+    if (options.search?.trim()) {
+        params.set('search', options.search.trim())
+    }
+
+    params.set('page', String(options.page ?? 0))
+    params.set('size', String(options.size ?? 10))
+
+    const response = await fetch(
+        `${API_BASE_URL}/api/admin/users?${params.toString()}`,
+        {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                Accept: 'application/json',
+            },
+        }
+    )
+
+    if (!response.ok) {
+        throw new Error(await getErrorMessage(response))
+    }
+
+    return response.json() as Promise<AdminUserPageResponse>
+}
+
+/**
+ * Enable or disable a Student or Teacher account.
+ */
+export async function updateAdminUserStatus(
+    userId: number,
+    enabled: boolean
+): Promise<AdminManagedUser> {
+
+    const csrfHeaders = await getCsrfHeaders()
+
+    const response = await fetch(
+        `${API_BASE_URL}/api/admin/users/${userId}/status`,
+        {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: {
+                ...csrfHeaders,
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+            },
+            body: JSON.stringify({ enabled }),
+        }
+    )
+
+    if (!response.ok) {
+        throw new Error(await getErrorMessage(response))
+    }
+
+    return response.json() as Promise<AdminManagedUser>
+}
