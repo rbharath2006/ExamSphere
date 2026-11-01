@@ -34,4 +34,7 @@ public interface ExamAttemptRepository
 
     // Retrieve attempts belonging to an examination.
     List<ExamAttempt> findByExamId(Long examId);
+
+    // Check whether an examination already has student attempts.
+    boolean existsByExamId(Long examId);
 }

@@ -6,7 +6,6 @@ import com.onlineexam.backend.dto.CreateQuestionOptionRequest;
 import com.onlineexam.backend.dto.QuestionResponse;
 
 import com.onlineexam.backend.entity.*;
-
 import com.onlineexam.backend.repository.*;
 
 import org.springframework.http.HttpStatus;
@@ -15,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -26,19 +26,25 @@ public class QuestionService {
     private final QuestionRepository questionRepository;
     private final QuestionOptionRepository optionRepository;
     private final UserAccountRepository userRepository;
+    private final ExamAttemptRepository attemptRepository;
 
     public QuestionService(
             ExamRepository examRepository,
             QuestionRepository questionRepository,
             QuestionOptionRepository optionRepository,
-            UserAccountRepository userRepository
+            UserAccountRepository userRepository,
+            ExamAttemptRepository attemptRepository
     ) {
         this.examRepository = examRepository;
         this.questionRepository = questionRepository;
         this.optionRepository = optionRepository;
         this.userRepository = userRepository;
+        this.attemptRepository = attemptRepository;
     }
 
+    /**
+     * Add a question to a Teacher's draft examination.
+     */
     @Transactional
     public QuestionResponse addQuestion(
             String teacherEmail,
@@ -46,69 +52,30 @@ public class QuestionService {
             CreateQuestionRequest request
     ) {
 
-        // 1. Find the authenticated Teacher.
-        UserAccount teacher = userRepository
-                .findByEmailIgnoreCase(teacherEmail.trim())
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.UNAUTHORIZED,
-                                "Teacher account not found"
-                        )
-                );
+        UserAccount teacher = getEnabledTeacher(teacherEmail);
 
-        // 2. Verify Teacher role and account status.
-        if (teacher.getRole() != UserRole.TEACHER
-                || !teacher.isEnabled()) {
+        Exam exam = getOwnedExam(examId, teacher.getId());
 
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "Only enabled Teachers can add questions"
-            );
-        }
+        ensureQuestionsCanBeModified(exam);
 
-        // 3. Verify that this examination belongs to the Teacher.
-        Exam exam = examRepository
-                .findByIdAndCreatedById(examId, teacher.getId())
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.NOT_FOUND,
-                                "Examination not found"
-                        )
-                );
-
-        // 4. Questions can only be added to draft exams.
-        if (exam.getStatus() != ExamStatus.DRAFT) {
-
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Questions can only be added to draft examinations"
-            );
-        }
-
-        // 5. Validate the answer options.
         validateOptions(request);
 
-        // 6. Validate negative marking.
         BigDecimal negativeMarks =
                 request.negativeMarks() == null
                         ? BigDecimal.ZERO
                         : request.negativeMarks();
 
         if (negativeMarks.compareTo(request.marks()) > 0) {
-
             throw new IllegalArgumentException(
                     "Negative marks cannot exceed question marks"
             );
         }
 
-        // 7. Calculate the next question order.
-        long existingQuestionCount =
+        long existingCount =
                 questionRepository.countByExamId(examId);
 
-        int displayOrder =
-                Math.toIntExact(existingQuestionCount + 1);
+        int displayOrder = Math.toIntExact(existingCount + 1);
 
-        // 8. Create and save the question.
         Question question = new Question(
                 examId,
                 request.questionText().trim(),
@@ -121,35 +88,16 @@ public class QuestionService {
         Question savedQuestion =
                 questionRepository.saveAndFlush(question);
 
-        // 9. Create and save the answer options.
-        List<QuestionOption> options = new java.util.ArrayList<>();
-
-        int optionOrder = 1;
-
-        for (CreateQuestionOptionRequest optionRequest : request.options()) {
-
-            QuestionOption option = new QuestionOption(
-                    savedQuestion.getId(),
-                    optionRequest.optionText().trim(),
-                    optionOrder++,
-                    optionRequest.isCorrect()
-            );
-
-            options.add(option);
-        }
-
         List<QuestionOption> savedOptions =
-                optionRepository.saveAllAndFlush(options);
+                saveOptions(savedQuestion.getId(), request);
 
-        // 10. Update examination maximum marks.
-        BigDecimal updatedTotalMarks =
-                exam.getTotalMarks().add(request.marks());
+        // Recalculate the examination's total marks.
+        exam.setTotalMarks(
+                exam.getTotalMarks().add(request.marks())
+        );
 
-        exam.setTotalMarks(updatedTotalMarks);
+        examRepository.saveAndFlush(exam);
 
-        examRepository.save(exam);
-
-        // 11. Return the saved question.
         return QuestionResponse.from(
                 savedQuestion,
                 savedOptions
@@ -157,7 +105,256 @@ public class QuestionService {
     }
 
     /**
-     * Validates question option count and correct-answer selection.
+     * List all questions belonging to an examination.
+     * Only the owning Teacher can access this endpoint.
+     */
+    @Transactional(readOnly = true)
+    public List<QuestionResponse> getQuestions(
+            String teacherEmail,
+            Long examId
+    ) {
+
+        UserAccount teacher = getEnabledTeacher(teacherEmail);
+
+        getOwnedExam(examId, teacher.getId());
+
+        List<Question> questions =
+                questionRepository.findByExamIdOrderByDisplayOrderAsc(
+                        examId
+                );
+
+        List<QuestionResponse> responses = new ArrayList<>();
+
+        for (Question question : questions) {
+
+            List<QuestionOption> options =
+                    optionRepository
+                            .findByQuestionIdOrderByDisplayOrderAsc(
+                                    question.getId()
+                            );
+
+            responses.add(
+                    QuestionResponse.from(question, options)
+            );
+        }
+
+        return responses;
+    }
+
+    /**
+     * Edit an existing question and replace its options.
+     */
+    @Transactional
+    public QuestionResponse updateQuestion(
+            String teacherEmail,
+            Long examId,
+            Long questionId,
+            CreateQuestionRequest request
+    ) {
+
+        UserAccount teacher = getEnabledTeacher(teacherEmail);
+
+        Exam exam = getOwnedExam(examId, teacher.getId());
+
+        ensureQuestionsCanBeModified(exam);
+
+        Question question = questionRepository
+                .findByIdAndExamId(questionId, examId)
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Question not found"
+                        )
+                );
+
+        validateOptions(request);
+
+        BigDecimal negativeMarks =
+                request.negativeMarks() == null
+                        ? BigDecimal.ZERO
+                        : request.negativeMarks();
+
+        if (negativeMarks.compareTo(request.marks()) > 0) {
+            throw new IllegalArgumentException(
+                    "Negative marks cannot exceed question marks"
+            );
+        }
+
+        // Remember the previous marks before updating.
+        BigDecimal previousMarks = question.getMarks();
+
+        // Update question information.
+        question.setQuestionText(request.questionText().trim());
+        question.setQuestionType(request.questionType());
+        question.setMarks(request.marks());
+        question.setNegativeMarks(negativeMarks);
+
+        Question updatedQuestion =
+                questionRepository.saveAndFlush(question);
+
+        // Replace the old options with the new options.
+        List<QuestionOption> oldOptions =
+                optionRepository.findByQuestionIdOrderByDisplayOrderAsc(
+                        questionId
+                );
+
+        optionRepository.deleteAllInBatch(oldOptions);
+        optionRepository.flush();
+
+        List<QuestionOption> updatedOptions =
+                saveOptions(questionId, request);
+
+        // Recalculate total marks.
+        BigDecimal updatedTotal =
+                exam.getTotalMarks()
+                        .subtract(previousMarks)
+                        .add(request.marks());
+
+        exam.setTotalMarks(updatedTotal);
+
+        examRepository.saveAndFlush(exam);
+
+        return QuestionResponse.from(
+                updatedQuestion,
+                updatedOptions
+        );
+    }
+
+    /**
+     * Delete a question and recalculate examination marks.
+     */
+    @Transactional
+    public void deleteQuestion(
+            String teacherEmail,
+            Long examId,
+            Long questionId
+    ) {
+
+        UserAccount teacher = getEnabledTeacher(teacherEmail);
+
+        Exam exam = getOwnedExam(examId, teacher.getId());
+
+        ensureQuestionsCanBeModified(exam);
+
+        Question question = questionRepository
+                .findByIdAndExamId(questionId, examId)
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Question not found"
+                        )
+                );
+
+        BigDecimal questionMarks = question.getMarks();
+
+        // Delete the question.
+        // Database cascade deletes its question options.
+        questionRepository.delete(question);
+        questionRepository.flush();
+
+        // Recalculate total examination marks.
+        exam.setTotalMarks(
+                exam.getTotalMarks().subtract(questionMarks)
+        );
+
+        examRepository.saveAndFlush(exam);
+
+        // Reassign question display order without gaps.
+        compactDisplayOrder(examId);
+    }
+
+    /**
+     * Find an enabled Teacher.
+     */
+    private UserAccount getEnabledTeacher(String email) {
+
+        UserAccount teacher = userRepository
+                .findByEmailIgnoreCase(email.trim())
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.UNAUTHORIZED,
+                                "Teacher account not found"
+                        )
+                );
+
+        if (teacher.getRole() != UserRole.TEACHER
+                || !teacher.isEnabled()) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only enabled Teachers can manage questions"
+            );
+        }
+
+        return teacher;
+    }
+
+    /**
+     * Verify examination ownership.
+     */
+    private Exam getOwnedExam(Long examId, Long teacherId) {
+
+        return examRepository
+                .findByIdAndCreatedById(examId, teacherId)
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Examination not found"
+                        )
+                );
+    }
+
+    /**
+     * Prevent changes to published exams or exams with attempts.
+     */
+    private void ensureQuestionsCanBeModified(Exam exam) {
+
+        if (exam.getStatus() != ExamStatus.DRAFT) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Questions can only be changed in draft examinations"
+            );
+        }
+
+        if (attemptRepository.existsByExamId(exam.getId())) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Questions cannot be changed after an exam attempt exists"
+            );
+        }
+    }
+
+    /**
+     * Save answer options for a question.
+     */
+    private List<QuestionOption> saveOptions(
+            Long questionId,
+            CreateQuestionRequest request
+    ) {
+
+        List<QuestionOption> options = new ArrayList<>();
+
+        int order = 1;
+
+        for (CreateQuestionOptionRequest optionRequest : request.options()) {
+
+            QuestionOption option = new QuestionOption(
+                    questionId,
+                    optionRequest.optionText().trim(),
+                    order++,
+                    optionRequest.isCorrect()
+            );
+
+            options.add(option);
+        }
+
+        return optionRepository.saveAllAndFlush(options);
+    }
+
+    /**
+     * Validate answer options.
      */
     private void validateOptions(CreateQuestionRequest request) {
 
@@ -170,32 +367,31 @@ public class QuestionService {
             );
         }
 
-        // Exactly one answer must be correct.
-        long correctAnswerCount = options.stream()
+        long correctCount = options.stream()
                 .filter(CreateQuestionOptionRequest::isCorrect)
                 .count();
 
-        if (correctAnswerCount != 1) {
+        if (correctCount != 1) {
             throw new IllegalArgumentException(
                     "Exactly one option must be marked as correct"
             );
         }
 
-        // All option text must be unique.
-        long uniqueOptionCount = options.stream()
+        long uniqueCount = options.stream()
                 .map(option ->
-                        option.optionText().trim().toLowerCase(Locale.ROOT)
+                        option.optionText()
+                                .trim()
+                                .toLowerCase(Locale.ROOT)
                 )
                 .distinct()
                 .count();
 
-        if (uniqueOptionCount != options.size()) {
+        if (uniqueCount != options.size()) {
             throw new IllegalArgumentException(
                     "Duplicate answer options are not allowed"
             );
         }
 
-        // Single-choice MCQ must have exactly four options.
         if (request.questionType() == QuestionType.SINGLE_CHOICE
                 && options.size() != 4) {
 
@@ -204,7 +400,6 @@ public class QuestionService {
             );
         }
 
-        // True/False questions must have exactly True and False.
         if (request.questionType() == QuestionType.TRUE_FALSE) {
 
             if (options.size() != 2) {
@@ -215,7 +410,9 @@ public class QuestionService {
 
             Set<String> optionTexts = options.stream()
                     .map(option ->
-                            option.optionText().trim().toLowerCase(Locale.ROOT)
+                            option.optionText()
+                                    .trim()
+                                    .toLowerCase(Locale.ROOT)
                     )
                     .collect(java.util.stream.Collectors.toSet());
 
@@ -225,5 +422,43 @@ public class QuestionService {
                 );
             }
         }
+    }
+
+    /**
+     * Compact question ordering after a deletion.
+     *
+     * Temporary higher positions avoid conflicts with the
+     * unique constraint on (exam_id, display_order).
+     */
+    private void compactDisplayOrder(Long examId) {
+
+        List<Question> remaining =
+                questionRepository.findByExamIdOrderByDisplayOrderAsc(
+                        examId
+                );
+
+        if (remaining.isEmpty()) {
+            return;
+        }
+
+        int offset = remaining.get(
+                remaining.size() - 1
+        ).getDisplayOrder() + 1;
+
+        // Move existing questions to temporary unique positions.
+        for (Question question : remaining) {
+            question.setDisplayOrder(
+                    Math.addExact(question.getDisplayOrder(), offset)
+            );
+        }
+
+        questionRepository.saveAllAndFlush(remaining);
+
+        // Assign their final sequential positions.
+        for (int i = 0; i < remaining.size(); i++) {
+            remaining.get(i).setDisplayOrder(i + 1);
+        }
+
+        questionRepository.saveAllAndFlush(remaining);
     }
 }

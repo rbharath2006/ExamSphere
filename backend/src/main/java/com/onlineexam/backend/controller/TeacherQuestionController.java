@@ -12,6 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/teacher/exams/{examId}/questions")
 public class TeacherQuestionController {
@@ -24,11 +26,7 @@ public class TeacherQuestionController {
         this.questionService = questionService;
     }
 
-    /**
-     * POST /api/teacher/exams/{examId}/questions
-     *
-     * Adds a question to a Teacher's draft examination.
-     */
+    // Create a question.
     @PostMapping
     public ResponseEntity<QuestionResponse> addQuestion(
 
@@ -51,5 +49,71 @@ public class TeacherQuestionController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(response);
+    }
+
+    // List all questions belonging to an examination.
+    @GetMapping
+    public ResponseEntity<List<QuestionResponse>> getQuestions(
+
+            @PathVariable Long examId,
+
+            Authentication authentication
+
+    ) {
+
+        List<QuestionResponse> response =
+                questionService.getQuestions(
+                        authentication.getName(),
+                        examId
+                );
+
+        return ResponseEntity.ok(response);
+    }
+
+    // Edit an existing question.
+    @PutMapping("/{questionId}")
+    public ResponseEntity<QuestionResponse> updateQuestion(
+
+            @PathVariable Long examId,
+
+            @PathVariable Long questionId,
+
+            @Valid @RequestBody
+            CreateQuestionRequest request,
+
+            Authentication authentication
+
+    ) {
+
+        QuestionResponse response =
+                questionService.updateQuestion(
+                        authentication.getName(),
+                        examId,
+                        questionId,
+                        request
+                );
+
+        return ResponseEntity.ok(response);
+    }
+
+    // Delete an existing question.
+    @DeleteMapping("/{questionId}")
+    public ResponseEntity<Void> deleteQuestion(
+
+            @PathVariable Long examId,
+
+            @PathVariable Long questionId,
+
+            Authentication authentication
+
+    ) {
+
+        questionService.deleteQuestion(
+                authentication.getName(),
+                examId,
+                questionId
+        );
+
+        return ResponseEntity.noContent().build();
     }
 }
