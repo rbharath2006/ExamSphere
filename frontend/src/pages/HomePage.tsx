@@ -1,11 +1,12 @@
 import { Link } from 'react-router'
 import RoleCard from '../components/RoleCard'
 import { roles } from '../types/roles'
+import BackendStatus from '../components/BackendStatus'
 
 export default function HomePage() {
     return (
         <main className="min-h-screen bg-slate-950 text-white">
-
+            <BackendStatus />
             <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
 
                 <Link to="/" className="text-2xl font-bold">
