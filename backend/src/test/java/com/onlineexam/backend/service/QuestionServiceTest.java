@@ -81,7 +81,7 @@ class QuestionServiceTest {
         when(teacher.getId()).thenReturn(3L);
         when(teacher.getRole()).thenReturn(UserRole.TEACHER);
         when(teacher.isEnabled()).thenReturn(true);
-        when(examRepository.findByIdAndCreatedById(EXAM_ID, 3L))
+        when(examRepository.findByIdAndCreatedByIdForUpdate(EXAM_ID, 3L))
                 .thenReturn(Optional.of(exam));
         when(exam.getId()).thenReturn(EXAM_ID);
         when(exam.getStatus()).thenReturn(ExamStatus.DRAFT);
@@ -105,12 +105,17 @@ class QuestionServiceTest {
                 .thenReturn(List.of(firstOption));
         when(optionRepository.findByQuestionIdOrderByDisplayOrderAsc(2L))
                 .thenReturn(List.of());
+        when(examRepository.findByIdAndCreatedById(EXAM_ID, 3L))
+                .thenReturn(Optional.of(exam));
 
         var responses = questionService.getQuestions(TEACHER_EMAIL, EXAM_ID);
 
         assertEquals(List.of(1, 2),
                 responses.stream().map(response -> response.displayOrder()).toList());
         assertEquals("A", responses.getFirst().options().getFirst().optionText());
+        verify(examRepository).findByIdAndCreatedById(EXAM_ID, 3L);
+        verify(examRepository, never())
+                .findByIdAndCreatedByIdForUpdate(EXAM_ID, 3L);
     }
 
     @Test
@@ -168,7 +173,7 @@ class QuestionServiceTest {
 
     @Test
     void anotherTeacherCannotAccessExam() {
-        when(examRepository.findByIdAndCreatedById(EXAM_ID, 3L))
+        when(examRepository.findByIdAndCreatedByIdForUpdate(EXAM_ID, 3L))
                 .thenReturn(Optional.empty());
 
         assertThrows(ResponseStatusException.class,
