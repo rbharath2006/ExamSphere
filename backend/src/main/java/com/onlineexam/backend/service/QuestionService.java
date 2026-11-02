@@ -71,10 +71,14 @@ public class QuestionService {
             );
         }
 
-        long existingCount =
-                questionRepository.countByExamId(examId);
+        List<Question> existingQuestions =
+                questionRepository.findByExamIdOrderByDisplayOrderAsc(examId);
 
-        int displayOrder = Math.toIntExact(existingCount + 1);
+        int displayOrder = existingQuestions.stream()
+                .map(Question::getDisplayOrder)
+                .max(Integer::compareTo)
+                .map(order -> Math.addExact(order, 1))
+                .orElse(1);
 
         Question question = new Question(
                 examId,
@@ -91,12 +95,7 @@ public class QuestionService {
         List<QuestionOption> savedOptions =
                 saveOptions(savedQuestion.getId(), request);
 
-        // Recalculate the examination's total marks.
-        exam.setTotalMarks(
-                exam.getTotalMarks().add(request.marks())
-        );
-
-        examRepository.saveAndFlush(exam);
+        recalculateTotalMarks(exam);
 
         return QuestionResponse.from(
                 savedQuestion,
@@ -180,9 +179,6 @@ public class QuestionService {
             );
         }
 
-        // Remember the previous marks before updating.
-        BigDecimal previousMarks = question.getMarks();
-
         // Update question information.
         question.setQuestionText(request.questionText().trim());
         question.setQuestionType(request.questionType());
@@ -204,15 +200,7 @@ public class QuestionService {
         List<QuestionOption> updatedOptions =
                 saveOptions(questionId, request);
 
-        // Recalculate total marks.
-        BigDecimal updatedTotal =
-                exam.getTotalMarks()
-                        .subtract(previousMarks)
-                        .add(request.marks());
-
-        exam.setTotalMarks(updatedTotal);
-
-        examRepository.saveAndFlush(exam);
+        recalculateTotalMarks(exam);
 
         return QuestionResponse.from(
                 updatedQuestion,
@@ -245,22 +233,15 @@ public class QuestionService {
                         )
                 );
 
-        BigDecimal questionMarks = question.getMarks();
-
         // Delete the question.
         // Database cascade deletes its question options.
         questionRepository.delete(question);
         questionRepository.flush();
 
-        // Recalculate total examination marks.
-        exam.setTotalMarks(
-                exam.getTotalMarks().subtract(questionMarks)
-        );
-
-        examRepository.saveAndFlush(exam);
-
         // Reassign question display order without gaps.
         compactDisplayOrder(examId);
+
+        recalculateTotalMarks(exam);
     }
 
     /**
@@ -460,5 +441,22 @@ public class QuestionService {
         }
 
         questionRepository.saveAllAndFlush(remaining);
+    }
+
+    /**
+     * Recalculate from the questions rather than applying a delta to the
+     * stored value, so the invariant remains correct even if old data drifted.
+     */
+    private void recalculateTotalMarks(Exam exam) {
+
+        BigDecimal totalMarks =
+                questionRepository
+                        .findByExamIdOrderByDisplayOrderAsc(exam.getId())
+                        .stream()
+                        .map(Question::getMarks)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        exam.setTotalMarks(totalMarks);
+        examRepository.saveAndFlush(exam);
     }
 }
