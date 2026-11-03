@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import {
     getStudentAttempt,
+    ApiRequestError,
     saveStudentAnswer,
     submitStudentAttempt,
     type StudentAttempt,
@@ -15,7 +16,9 @@ export default function TakeExamPage() {
     const [remaining, setRemaining] = useState(0)
     const [error, setError] = useState('')
     const [saving, setSaving] = useState(false)
+    const [submitting, setSubmitting] = useState(false)
     const autoSubmitStarted = useRef(false)
+    const submitStarted = useRef(false)
 
     useEffect(() => {
         void getStudentAttempt(Number(attemptId)).then((value) => {
@@ -42,11 +45,20 @@ export default function TakeExamPage() {
         if (!attempt || remaining > 0 || attempt.status !== 'IN_PROGRESS'
             || autoSubmitStarted.current) return
         autoSubmitStarted.current = true
+        submitStarted.current = true
+        setSubmitting(true)
         void submitStudentAttempt(attempt.attemptId)
             .then(() => navigate(`/student/attempts/${attempt.attemptId}/result`))
             .catch((reason) => {
+                if (reason instanceof ApiRequestError && reason.status === 409
+                    && reason.message === 'Exam results have not been published yet') {
+                    navigate(`/student/attempts/${attempt.attemptId}/result`)
+                    return
+                }
                 setError(reason instanceof Error ? reason.message : 'Automatic submission failed')
                 autoSubmitStarted.current = false
+                submitStarted.current = false
+                setSubmitting(false)
             })
     }, [attempt, remaining, navigate])
 
@@ -78,12 +90,22 @@ export default function TakeExamPage() {
     }
 
     async function submit() {
-        if (!attempt || !window.confirm('Submit your examination? This cannot be undone.')) return
+        if (!attempt || submitStarted.current || !window.confirm('Submit your examination? This cannot be undone.')) return
+        submitStarted.current = true
+        setSubmitting(true)
+        setError('')
         try {
             await submitStudentAttempt(attempt.attemptId)
             navigate(`/student/attempts/${attempt.attemptId}/result`)
         } catch (reason) {
+            if (reason instanceof ApiRequestError && reason.status === 409
+                && reason.message === 'Exam results have not been published yet') {
+                navigate(`/student/attempts/${attempt.attemptId}/result`)
+                return
+            }
             setError(reason instanceof Error ? reason.message : 'Unable to submit')
+            submitStarted.current = false
+            setSubmitting(false)
         }
     }
 
@@ -130,7 +152,7 @@ export default function TakeExamPage() {
                         <div className="mt-8 flex justify-between">
                             <button disabled={current === 0} onClick={() => setCurrent(current - 1)} className="rounded-lg border border-slate-700 px-4 py-2 disabled:opacity-40">Previous</button>
                             {current === attempt.questions.length - 1
-                                ? <button onClick={() => void submit()} className="rounded-lg bg-green-600 px-4 py-2 font-semibold">Submit saved answers</button>
+                                ? <button disabled={submitting} onClick={() => void submit()} className="rounded-lg bg-green-600 px-4 py-2 font-semibold disabled:cursor-not-allowed disabled:opacity-50">{submitting ? 'Submitting...' : 'Submit saved answers'}</button>
                                 : <button onClick={() => setCurrent(current + 1)} className="rounded-lg bg-blue-600 px-4 py-2">Next</button>}
                         </div>
                         {error && <p role="alert" className="mt-4 text-red-400">{error}</p>}

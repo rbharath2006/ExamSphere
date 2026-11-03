@@ -8,6 +8,7 @@ import {
     getTeacherExams,
     logout,
     publishTeacherExam,
+    publishTeacherExamResults,
     type CreateExamPayload,
     type TeacherExam,
 } from '../services/authService'
@@ -32,6 +33,7 @@ export default function TeacherExamsPage() {
     const [form, setForm] = useState(emptyForm)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [publishingExamId, setPublishingExamId] = useState<number | null>(null)
     const [error, setError] = useState('')
     const [success, setSuccess] = useState('')
 
@@ -116,6 +118,28 @@ export default function TeacherExamsPage() {
         }
     }
 
+    async function publishResults(exam: TeacherExam) {
+        if (publishingExamId !== null) return
+        if (!window.confirm('Publish results for this examination? Students will then be able to view their results.')) return
+
+        setError('')
+        setSuccess('')
+        setPublishingExamId(exam.id)
+        try {
+            await publishTeacherExamResults(exam.id)
+            setExams(await getTeacherExams())
+            setSuccess('Examination results published successfully.')
+        } catch (reason) {
+            setError(
+                reason instanceof Error
+                    ? reason.message
+                    : 'Unable to publish examination results'
+            )
+        } finally {
+            setPublishingExamId(null)
+        }
+    }
+
     if (loading) {
         return <main className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-300">Loading examinations...</main>
     }
@@ -180,9 +204,29 @@ export default function TeacherExamsPage() {
                                     ) : exam.status === 'PUBLISHED' ? (
                                         <button onClick={() => void changeExamStatus(exam, 'close')} className="rounded-lg border border-amber-500/50 px-4 py-2 text-sm text-amber-300 hover:bg-amber-500/10">Close Examination</button>
                                     ) : (
-                                        <span className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-500">Editing disabled</span>
+                                        <>
+                                            {!exam.resultsPublishedAt ? (
+                                                <button
+                                                    disabled={publishingExamId !== null}
+                                                    onClick={() => void publishResults(exam)}
+                                                    className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    {publishingExamId === exam.id ? 'Publishing...' : 'Publish Results'}
+                                                </button>
+                                            ) : (
+                                                <span className="rounded-lg border border-green-500/50 px-4 py-2 text-sm text-green-300">
+                                                    Results published
+                                                </span>
+                                            )}
+                                            <span className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-500">Editing disabled</span>
+                                        </>
                                     )}
                                 </div>
+                                {exam.resultsPublishedAt && (
+                                    <p className="mt-4 text-sm text-green-400">
+                                        Results published: {formatDate(exam.resultsPublishedAt)}
+                                    </p>
+                                )}
                             </article>
                         ))}
                     </div>

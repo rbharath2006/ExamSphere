@@ -11,6 +11,16 @@ export interface UserResponse {
     createdAt: string
 }
 
+export class ApiRequestError extends Error {
+    readonly status: number
+
+    constructor(message: string, status: number) {
+        super(message)
+        this.name = 'ApiRequestError'
+        this.status = status
+    }
+}
+
 async function getCsrfHeaders(): Promise<Record<string, string>> {
     const response = await fetch(`${API_BASE_URL}/api/csrf`, {
         method: 'GET',
@@ -79,7 +89,10 @@ export async function login(
     })
 
     if (!response.ok) {
-        throw new Error(await getErrorMessage(response))
+        throw new ApiRequestError(
+            await getErrorMessage(response),
+            response.status
+        )
     }
 
     // Obtain a fresh CSRF token after authentication.
@@ -95,7 +108,10 @@ export async function getCurrentUser(): Promise<UserResponse> {
     })
 
     if (!response.ok) {
-        throw new Error(await getErrorMessage(response))
+        throw new ApiRequestError(
+            await getErrorMessage(response),
+            response.status
+        )
     }
 
     return response.json() as Promise<UserResponse>
@@ -277,6 +293,7 @@ export interface TeacherExam {
     endsAt: string
     status: ExamStatus
     totalMarks: number
+    resultsPublishedAt: string | null
 }
 
 export interface QuestionOption {
@@ -318,7 +335,10 @@ async function teacherRequest<T>(
     })
 
     if (!response.ok) {
-        throw new Error(await getErrorMessage(response))
+        throw new ApiRequestError(
+            await getErrorMessage(response),
+            response.status
+        )
     }
 
     if (response.status === 204) return undefined as T
@@ -339,6 +359,13 @@ export async function publishTeacherExam(examId: number): Promise<TeacherExam> {
 export async function closeTeacherExam(examId: number): Promise<TeacherExam> {
     return teacherRequest<TeacherExam>(
         `/api/teacher/exams/${examId}/close`,
+        { method: 'POST' }
+    )
+}
+
+export async function publishTeacherExamResults(examId: number): Promise<TeacherExam> {
+    return teacherRequest<TeacherExam>(
+        `/api/teacher/exams/${examId}/results/publish`,
         { method: 'POST' }
     )
 }
