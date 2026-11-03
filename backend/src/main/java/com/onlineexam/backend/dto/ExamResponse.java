@@ -19,6 +19,7 @@ public record ExamResponse(
         Instant endsAt,
         ExamStatus status,
         BigDecimal totalMarks,
+        Instant resultsPublishedAt,
         Long createdById,
         Instant createdAt,
         Instant updatedAt
@@ -38,6 +39,7 @@ public record ExamResponse(
                 exam.getEndsAt(),
                 exam.getStatus(),
                 exam.getTotalMarks(),
+                exam.getResultsPublishedAt(),
                 exam.getCreatedById(),
                 exam.getCreatedAt(),
                 exam.getUpdatedAt()

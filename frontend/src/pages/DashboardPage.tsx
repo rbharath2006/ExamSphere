@@ -220,6 +220,24 @@ export default function DashboardPage() {
                             </Link>
                         )}
 
+                        {user.role === 'TEACHER' && (
+                            <Link
+                                to="/teacher/exams"
+                                className="rounded-lg border border-purple-500/40 px-4 py-2 text-sm text-purple-300 hover:bg-purple-500/10"
+                            >
+                                My Examinations
+                            </Link>
+                        )}
+
+                        {user.role === 'STUDENT' && (
+                            <Link
+                                to="/student/exams"
+                                className="rounded-lg border border-cyan-500/40 px-4 py-2 text-sm text-cyan-300 hover:bg-cyan-500/10"
+                            >
+                                Available Examinations
+                            </Link>
+                        )}
+
                         <button
                             onClick={handleLogout}
                             className="rounded-lg border border-red-500/40 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10"

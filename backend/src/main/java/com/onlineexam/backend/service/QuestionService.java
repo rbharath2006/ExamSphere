@@ -115,7 +115,7 @@ public class QuestionService {
 
         UserAccount teacher = getEnabledTeacher(teacherEmail);
 
-        getOwnedExam(examId, teacher.getId());
+        getOwnedExamForRead(examId, teacher.getId());
 
         List<Question> questions =
                 questionRepository.findByExamIdOrderByDisplayOrderAsc(
@@ -274,6 +274,18 @@ public class QuestionService {
      * Verify examination ownership.
      */
     private Exam getOwnedExam(Long examId, Long teacherId) {
+
+        return examRepository
+                .findByIdAndCreatedByIdForUpdate(examId, teacherId)
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Examination not found"
+                        )
+                );
+    }
+
+    private Exam getOwnedExamForRead(Long examId, Long teacherId) {
 
         return examRepository
                 .findByIdAndCreatedById(examId, teacherId)

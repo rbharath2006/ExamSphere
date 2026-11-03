@@ -2,6 +2,7 @@ package com.onlineexam.backend.integration;
 
 import com.onlineexam.backend.dto.CreateQuestionOptionRequest;
 import com.onlineexam.backend.dto.CreateQuestionRequest;
+import com.onlineexam.backend.dto.ExamResponse;
 import com.onlineexam.backend.dto.SaveAnswerRequest;
 import com.onlineexam.backend.entity.*;
 import com.onlineexam.backend.repository.*;
@@ -46,6 +47,7 @@ class PostgreSqlExamWorkflowIntegrationTest {
     @Autowired private ExamResultRepository results;
     @Autowired private ExpiredAttemptService expiration;
     @Autowired private StudentExamService studentExams;
+    @Autowired private ExamResultPublicationService resultPublication;
     @Autowired private QuestionService questionService;
     @Autowired private TestClock testClock;
 
@@ -362,6 +364,44 @@ class PostgreSqlExamWorkflowIntegrationTest {
         assertThrows(ResponseStatusException.class, () ->
                 questionService.updateQuestion(fixture.teacher.getEmail(),
                         fixture.exam.getId(), fixture.question.getId(), request));
+    }
+
+    @Test
+    void teacherPublishesClosedResultsAndStudentsSeeThemOnlyAfterPublication() {
+        Fixture fixture = fixture("result-publication");
+        fixture.exam.setStatus(ExamStatus.CLOSED);
+        exams.saveAndFlush(fixture.exam);
+
+        ExamAttempt attempt = attempts.saveAndFlush(new ExamAttempt(
+                fixture.exam.getId(), fixture.student.getId(),
+                Instant.now().plusSeconds(120)));
+        attemptIds.add(attempt.getId());
+        attempt.setStatus(AttemptStatus.SUBMITTED);
+        attempt.setSubmittedAt(Instant.now());
+        attempts.saveAndFlush(attempt);
+        results.saveAndFlush(new ExamResult(
+                attempt.getId(), BigDecimal.valueOf(2),
+                BigDecimal.valueOf(1), BigDecimal.valueOf(50)));
+
+        assertThrows(ResponseStatusException.class, () ->
+                studentExams.result(fixture.student.getEmail(), attempt.getId()));
+
+        ExamResponse published = resultPublication.publish(
+                fixture.teacher.getEmail(), fixture.exam.getId());
+        assertNotNull(published.resultsPublishedAt());
+
+        Instant originalTimestamp = exams.findById(fixture.exam.getId())
+                .orElseThrow().getResultsPublishedAt();
+        assertNotNull(originalTimestamp);
+
+        resultPublication.publish(fixture.teacher.getEmail(), fixture.exam.getId());
+
+        Instant persistedTimestampAfterRepeat = exams.findById(fixture.exam.getId())
+                .orElseThrow().getResultsPublishedAt();
+        assertEquals(originalTimestamp, persistedTimestampAfterRepeat);
+        assertEquals(0, BigDecimal.valueOf(1).compareTo(
+                studentExams.result(
+                        fixture.student.getEmail(), attempt.getId()).obtainedMarks()));
     }
 
     private void awaitAndStart(CountDownLatch gate, Fixture fixture) {

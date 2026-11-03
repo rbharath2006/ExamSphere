@@ -52,6 +52,7 @@ class StudentExamServiceTest {
         when(student.getId()).thenReturn(7L);
         when(student.getRole()).thenReturn(UserRole.STUDENT);
         when(student.isEnabled()).thenReturn(true);
+        when(exam.getResultsPublishedAt()).thenReturn(Instant.now());
         when(attempts.findByIdAndStudentIdForUpdate(anyLong(), anyLong()))
                 .thenReturn(Optional.of(attempt));
         when(attempts.findByIdAndStudentId(anyLong(), anyLong()))
