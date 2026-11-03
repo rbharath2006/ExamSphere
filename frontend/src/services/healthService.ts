@@ -1,4 +1,6 @@
 
+import { API_BASE_URL } from './apiConfig'
+
 export interface HealthResponse {
     status: string
     application: string
@@ -7,7 +9,7 @@ export interface HealthResponse {
 
 export async function getBackendHealth(): Promise<HealthResponse> {
     const response = await fetch(
-        'http://localhost:8080/api/health'
+        `${API_BASE_URL}/api/health`
     )
 
     if (!response.ok) {

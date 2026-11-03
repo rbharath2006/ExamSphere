@@ -20,5 +20,15 @@ spring:
   flyway:
     enabled: true
 
+app:
+  cors:
+    allowed-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
+
 server:
-  port: 8080
+  port: ${PORT:8080}
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: ${SESSION_COOKIE_SECURE:false}
+        same-site: lax

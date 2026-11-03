@@ -1,5 +1,5 @@
 
-const API_BASE_URL = 'http://localhost:8080'
+import { API_BASE_URL } from './apiConfig'
 
 export type UserRole = 'ADMIN' | 'TEACHER' | 'STUDENT'
 
@@ -41,7 +41,7 @@ async function getCsrfHeaders(): Promise<Record<string, string>> {
 
     if (!cookie) {
         throw new Error(
-            'CSRF cookie not found. Check localhost and backend CORS settings.'
+            'CSRF cookie not found. Check the frontend origin and backend CORS settings.'
         )
     }
 
@@ -161,7 +161,7 @@ export interface AdminDashboardSummaryResponse {
 
 export async function getAdminDashboardSummary(): Promise<AdminDashboardSummaryResponse> {
     const response = await fetch(
-        'http://localhost:8080/api/admin/dashboard/summary',
+        `${API_BASE_URL}/api/admin/dashboard/summary`,
         {
             method: 'GET',
             credentials: 'include',
