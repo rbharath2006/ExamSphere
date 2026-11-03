@@ -258,11 +258,11 @@ Production deployment should add an environment-specific HTTPS profile with `ser
 
 No login/registration rate limiter or gateway configuration was found. Production must provide rate limiting at the reverse proxy/API gateway or adopt a shared, distributed limiter before internet exposure. No fragile in-memory limiter was added.
 
-## Final worktree
+## Worktree state at the time of the November 2 report
 
 Final branch: `feature/teacher-exam-management-ui`
 
-The worktree remains uncommitted. Existing changes and the new report are retained.
+At that historical point, the worktree remained uncommitted. The later implementation commits and the November 3 verification are recorded in the addendum below.
 
 Complete changed-path list:
 
@@ -296,3 +296,35 @@ Complete changed-path list:
 - `frontend/src/pages/TeacherQuestionsPage.tsx`
 - `frontend/src/services/authService.ts`
 - `docs/SECURITY_CORRECTION_REPORT.md`
+
+## Verification addendum — 2026-11-03
+
+This addendum records final verification evidence after the historical November 2 security-correction work. It does not replace or erase the earlier audit history above.
+
+### Final implementation commits
+
+- `8f15932` — Implement Teacher and Student examination workflows with controlled result publication.
+- `5ddf723` — Document examination system security corrections.
+- `1191594` — Complete frontend result publication workflow.
+
+### Automated verification
+
+- Backend test suite: **58 tests passed, 0 failures, 0 errors**.
+- PostgreSQL integration tests: **10 tests passed**.
+- HTTP security integration tests: **9 tests passed**.
+- Frontend lint: passed.
+- Frontend production build: passed.
+
+These are automated test results reported for the final application state. They are separate from the historical test runs recorded in the sections above.
+
+### Manual verification
+
+The developer reported manually verifying the complete Admin, Teacher, and Student workflows using the running application. This includes account management, examination and question management, examination delivery, answer saving, manual and automatic submission, controlled result publication, and student result viewing.
+
+Manual verification is user-reported evidence and is not a substitute for the automated test results above.
+
+### Final implementation status
+
+The final implementation includes teacher-controlled result publication in the backend and the corresponding frontend publication and pending-results flows. The frontend now displays publication state and timestamp to teachers, handles HTTP 409 unpublished-result responses for students, and prevents duplicate submission actions.
+
+No database migrations were changed for this final documentation/application phase. No credentials or passwords are documented here.
